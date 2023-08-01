@@ -1259,7 +1259,7 @@ t    options work analogously, but fit the data to a B-spline, with the number o
     
     '''
 
-    def __init__(self, data, channel, fit_type='logratio_spline', fit_dof=10, fit_logx=True, noise_model='spritz', smooth_df=None, fmin=1e-5, fmax=None, offset_log_fit=True,fit_weight_corner=1e-4):
+    def __init__(self, data, channel, fit_type='logratio_spline', fit_dof=10, fit_logx=True, noise_model='spritz', smooth_df=None, fmin=1e-5, fmax=None, offset_log_fit=True,fit_weight_corner=1e-4,fs=None):
     
         self.channel = channel
         self.fit_type = fit_type
@@ -1268,7 +1268,8 @@ t    options work analogously, but fit the data to a B-spline, with the number o
         df=(f[-1]-f[0])/(len(f)-1) 
         self.df=df
 
-        fs=f[-1]*2
+        if fs is None:
+            fs=f[-1]*2
         ndata=(len(f)-1)*2
         self.ndata=ndata
 
@@ -1379,11 +1380,11 @@ t    options work analogously, but fit the data to a B-spline, with the number o
         elif fit_func=='spline':
             # I tried using the functionality in psdmodel.py but couldn't get it working.
             # to stay close to the existing implementation in psdmodel.py                    
-            print(f[0],'< f < ',f[-1],'fmin/fmax=',fmin,fmax)
+            #print(f[0],'< f < ',f[-1],'fmin/fmax=',fmin,fmax)
             n_knots=fit_dof-2 #dof=n_knots+2 (maybe, sort of guessing)                    
             knots=self.choose_knots(f) #This function needs f, not x
             xknots=knots
-            print('lowest f knots:',knots[:5])
+            #print('lowest f knots:',knots[:5])
             if fit_logx: xknots=np.log(knots) #transform to x-space if needed
             try:
                 fitspline=interpolate.LSQUnivariateSpline(x, y, xknots[1:-1], w=w, k=3, ext=3, check_finite=False)
@@ -1431,10 +1432,11 @@ t    options work analogously, but fit the data to a B-spline, with the number o
                     
             self.knots=knots
             self.fit=lambda x:fitspline(x)
+            self.interior_knots=fitspline.get_knots()
+            self.spline_coeffs=fitspline.get_coeffs()
                 
         else:    
-            raise ValueError('fit_func '+str(fit_func)+' not recognized.')
-            
+            raise ValueError('fit_func '+str(fit_func)+' not recognized.')            
 
             
     def choose_knots(self,x,verbose=False):
@@ -1462,7 +1464,7 @@ t    options work analogously, but fit the data to a B-spline, with the number o
         minf=x[0]
         maxf=x[-1]
         base=(maxf/minf)**(1/nknots)
-        print('base=',base)
+        #print('base=',base)
         # We use this choose_frequency_knots function, decreasing the 'base' value when
         # there are more knots desired to ensure that the benefit of more knots also
         # shows at lower frequencies. It is not clear whether this treatment is any
@@ -1589,6 +1591,24 @@ t    options work analogously, but fit the data to a B-spline, with the number o
                 plt.legend()
                 plt.show() 
 
+    def get_spline_data(self):
+        if not self.fit_func=='spline': return None
+        knots=self.interior_knots
+        coeffs=self.spline_coeffs
+        return {'knots':knots,'coeffs':coeffs}
+
+    def set_spline_data(self,splinedict):
+        t=splinedict['knots']
+        self.interior_knots=t
+        knots=np.array(3*[t[0]]+t.tolist()+3*[t[-1]])
+        #print('knots was:',self.knots)
+        self.knots=self.interior_knots.copy()
+        if self.fit_logx: self.knots=np.exp(self.knots)
+        #print('knots changed to:',self.knots)
+        self.coeffs=splinedict['coeffs']
+        self.spline=interpolate.BSpline(knots,self.coeffs,3)
+        self.fit=lambda x:self.spline(x)
+    
     def psd_fn(self, x):
         # returns the psd function defined earlier           
 
