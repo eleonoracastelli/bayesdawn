@@ -53,15 +53,14 @@ def load_tdi_timeseries(fname,
     tdi={}
     for ds in import_datasets:
         tdi[ds] = fid[ds+'/tdi'][()].squeeze()
-    # generate noise-only dataset
-    tdi['noise'] = np.copy(tdi['clean'])
+    # generate missing datasets     
+    for ds in ['noise', 'noisegal', 'glitch', 'noiseglitch', 'cleanglitch']:
+        tdi[ds] = np.copy(tdi['clean'])
     for comb in tdi['clean'].dtype.names[1:]: # loop on the TDI combination names
+        # build noise = clean - signal
         tdi['noise'][comb] = tdi['clean'][comb] - tdi['sky'][comb]# - tdi['gal'][comb]
-    # generate glitch and noiseglitch datasets
-    tdi['glitch'] = np.copy(tdi['noisefree'])
-    tdi['noiseglitch'] = np.copy(tdi['noise'])
-    tdi['cleanglitch'] = np.copy(tdi['clean'])
-    for comb in tdi['noisefree'].dtype.names[1:]: # loop on the TDI combination names
+        # build noisegal = noise + galaxy 
+        tdi['noisegal'][comb] = tdi['noise'][comb] + tdi['gal'][comb]
         # build glitch = noisefree - signal - galaxy 
         tdi['glitch'][comb] = tdi['noisefree'][comb] - tdi['sky'][comb] - tdi['gal'][comb]
         # set gaps to zero
@@ -79,6 +78,7 @@ def load_tdi_timeseries(fname,
                 tdi[dsgap][comb][np.isnan(tdi['obs']['X'])] = 0
     for comb in tdi['obs'].dtype.names[1:]:
         tdi['obs'][comb][np.isnan(tdi['obs']['X'])] = 0
+    fid.close()
     return tdi
 
 
