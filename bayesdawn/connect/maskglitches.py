@@ -6,7 +6,47 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal
 
-from bayesdawn.connect import fillgaps
+# from bayesdawn.connect import fillgaps
+
+def get_ldc_gap_mask(data, mode):
+    """
+    Extracts gap times or indexes from LDC data. 
+    Adapted from LDC Spritz analysis notebook https://gitlab.in2p3.fr/LISA/LDC/-/blob/develop/notebooks/LDC2b-Spritz.ipynb
+    
+    Parameters:
+    -----------
+        data: dict or numpy rec-array
+            LDC imported data. Format can be either dict containing multiple numpy recarrays 
+            or a single numpy rec-array with fields ['t', 'X', 'Y', 'Z'] or ['t', 'A', 'E', 'T'] 
+        mode: str
+            'times': returns gap start and stop times
+            'index': returns gap start and stop indexes
+    
+    Returns:
+    --------
+        gaps: numpy ndarray
+            vstack numpy ndarray containing start times on first row and stop times on second row
+    """
+    if type(data) is dict:
+        data = data[list(data.keys())[0]]
+        
+    dt = data['t'][1]-data['t'][0]
+    fs = 1/dt
+    # find all data points included in the gaps
+    gaps_data = data['t'][(data[data.dtype.names[1]])==0]
+    # find start times of gaps by taking first point and the point for which 
+    # the difference between two subsequent samples is more than dt
+    gapstarts = np.hstack([np.array([gaps_data[0]]), (gaps_data[1:])[gaps_data[1:]-gaps_data[:-1]>dt]])
+    # same thing with endpoints, but reversed
+    gapends = np.hstack([(gaps_data[:-1])[gaps_data[1:]-gaps_data[:-1]>dt], np.array([gaps_data[-1]])])
+    if mode == 'times':
+        # get the times for the gaps
+        gaps = np.vstack([gapstarts, gapends])
+    elif mode == 'index':
+        idxstarts = ((gapstarts - data['t'][0])*fs).astype(int)
+        idxends = ((gapends - data['t'][0])*fs).astype(int)
+        gaps = np.vstack([idxstarts, idxends])
+    return gaps
 
 def BH_lowpass(data, t_win=100,t_sam=5,fs=10):
     """
@@ -68,8 +108,10 @@ def detect_glitch_outliers(data, plot = True, threshold = 10):
             indexes of all detected outliers from the width of the distribution.
     """
     n = data.dtype.names[1]
-    gaps = fillgaps.get_ldc_gap_mask(data, mode='index')
-    
+    # gaps = fillgaps.get_ldc_gap_mask(data, mode='index')
+    gaps = get_ldc_gap_mask(data, mode='index')
+
+
     mad = scipy.stats.median_abs_deviation(data[n])
     to=len(data)
     if len(gaps>0):to=gaps[0][0]
